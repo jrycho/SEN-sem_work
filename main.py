@@ -2,6 +2,8 @@ import numpy as np
 import numpy.ma as ma
 import matplotlib.pyplot as plt
 from PIL import Image
+import cv2
+import time
 
 
 """  
@@ -25,7 +27,7 @@ class StereoDepth():
         self.img_right = img_right
         self.search_block_size = search_block_size
         self.search_block_size_floored = search_block_size //2
-        self.max_disparity = 16
+        self.max_disparity = 30
         self.x_size = np.array(self.img_left.shape[1])
         self.y_size = np.array(self.img_left.shape[0])
         self.disparity_map = np.zeros_like(img_left, dtype=np.float32)
@@ -113,6 +115,8 @@ class StereoDepth():
             self.solve()
         else:
             pass
+
+        plt.figure(figsize=(6,6))
         plt.imshow(self.disparity_map, cmap='plasma')
         plt.colorbar(label='Disparity')
         plt.title("Stereo Matching Result (Manual SSD)")
@@ -132,7 +136,7 @@ class StereoDepth():
         if not self.disparity_map.any():
             self.solve()
 
-        im = ax.imshow(self.disparity_to_distance(self.disparity_map, 3740/4, 0.16), cmap='turbo')
+        im = ax.imshow(self.disparity_to_distance(self.disparity_map, self.x_size, 0.16), cmap='turbo')
         ax.set_title(title)
         ax.axis('off')
         return im 
@@ -159,8 +163,28 @@ class StereoDepth():
 """  
 import images in numpy array, grayscale
 """
-img_left = np.array(Image.open('075view0.png').convert('L')).astype(np.uint8)
-img_right = np.array(Image.open('075view1.png').convert('L')).astype(np.uint8)
+
+img_compressed_left = cv2.resize(np.array(Image.open('view0.png').convert('L')).astype(np.uint8),
+    (0, 0), fx=0.35, fy=0.35, interpolation=cv2.INTER_AREA)
+img_compressed_right = cv2.resize(np.array(Image.open('view1.png').convert('L')).astype(np.uint8),
+    (0, 0), fx=0.35, fy=0.35, ) #image quality reduction using cv2
+img_left = img_compressed_left
+img_right = img_compressed_right
+
+
+"""
+If to try other pics in folder
+img_compressed_left = cv2.resize(np.array(Image.open('bikeim0.png').convert('L')).astype(np.uint8),
+    (0, 0), fx=0.4, fy=0.4, interpolation=cv2.INTER_AREA)
+img_compressed_right = cv2.resize(np.array(Image.open('bikeim1.png').convert('L')).astype(np.uint8),
+    (0, 0), fx=0.4, fy=0.4, )
+img_left = img_compressed_left
+img_right = img_compressed_right
+"""
+print(img_left.shape)
+
+
+
 """  
 objects creation
 """
@@ -169,6 +193,7 @@ Test2 = StereoDepth(img_left, img_right, 5)
 Test3 = StereoDepth(img_left, img_right, 7)
 Test4 = StereoDepth(img_left, img_right, 9)
 
+print("Running...")
 """  
 figure definition
 """
@@ -177,10 +202,22 @@ fig, axs = plt.subplots(2, 2, figsize=(12, 10),
                         gridspec_kw={'width_ratios': [1, 1], 'height_ratios': [1, 1]})
 
 # Plot all four StereoDepth outputs
+start1 = time.time()
 im1 = Test1.plot_on_ax(axs[0, 0], "Image Pair 1")
+print(f"Image Pair 1 plotted in {time.time() - start1:.3f} seconds")
+
+start2 = time.time()
 im2 = Test2.plot_on_ax(axs[0, 1], "Image Pair 2")
+print(f"Image Pair 2 plotted in {time.time() - start2:.3f} seconds")
+
+start3 = time.time()
 im3 = Test3.plot_on_ax(axs[1, 0], "Image Pair 3")
+print(f"Image Pair 3 plotted in {time.time() - start3:.3f} seconds")
+
+start4 = time.time()
 im4 = Test4.plot_on_ax(axs[1, 1], "Image Pair 4")
+print(f"Image Pair 4 plotted in {time.time() - start4:.3f} seconds")
+
 
 # Ensure all images use the same color scale
 vmin = min(im1.get_array().min(), im2.get_array().min(), im3.get_array().min(), im4.get_array().min())
@@ -190,7 +227,38 @@ for im in [im1, im2, im3, im4]:
 
 # Add a single shared colorbar
 cbar = fig.colorbar(im1, ax=axs, orientation='vertical', shrink=0.85, label='Distance')
-
 plt.suptitle("Stereo Disparity Maps", fontsize=16)
+
+
+plt.figure(figsize=(6,6))
+#plt.imshow(np.array((Test1.img_left)))
+plt.imshow(np.array(Image.open('view0.png')))
+plt.title("Original Picture")
+plt.axis('off')
+
+
+
+
+print("Running OpenCV StereoBM...")
+
+# Create StereoBM object
+stereo_bm = cv2.StereoBM_create(numDisparities=32, blockSize=9)
+
+start_cv = time.time()
+disparity_cv = stereo_bm.compute(img_left, img_right).astype(np.float32) / 16.0
+elapsed_cv = time.time() - start_cv
+print(f"OpenCV StereoBM computed in {elapsed_cv:.3f} seconds")
+
+# Show the result using matplotlib
+plt.figure(figsize=(6, 6))
+plt.imshow(disparity_cv, cmap='plasma')
+plt.colorbar(label='Disparity')
+plt.title("Stereo Matching Result (OpenCV StereoBM)")
+plt.axis('off')
+plt.tight_layout()
+
+Test4.heatmap_show()
+
 plt.show()
+
 
